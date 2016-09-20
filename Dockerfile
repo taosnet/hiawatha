@@ -6,13 +6,13 @@ RUN apk update && \
 	apk add hiawatha --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted && \
 	rm -rf /var/cache/apk/* && \
 	addgroup -S www-data && \
-	adduser -S -G www-data -g "Web Server" -h "/domains" web-srv && \
-	mkdir -p /var/www/domain/public /var/www/domain/log /certs
+	adduser -S -G www-data -g "Web Server" -h "/site" web-srv && \
+	mkdir /certs
 
 COPY hiawatha /etc/hiawatha/
 COPY hiawatha.pem /certs
-COPY run.sh /run.sh
+COPY hiawatha.sh /hiawatha.sh
 
 EXPOSE 80 443
 
-ENTRYPOINT ["/run.sh"]
+ENTRYPOINT ["/hiawatha.sh"]
