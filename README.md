@@ -1,6 +1,6 @@
 # Description
 
-Provides a basic framework or quickly creating a hiawatha server with your website. It is setup to easily allow integration with another container for lets encrypt certificates by storing the certificate is **/certs/**. This can easily be imported from another container. For this, it is setup to detect the files **/certs/key.pem**, **/certs/cert.pem**, and **/certs/chain.pem**. This integrates well with the image **m3adow/letsencrypt-simp_le**.
+Provides a basic framework or quickly creating a hiawatha server with your website. It is setup to easily allow integration with another container for lets encrypt certificates by storing the certificate is **/certs/**. The image **taosnet/cert-manager** can be used to ease the integration with Lets Encrypt.
 
 You can use the envirnomental variables to modify properties about the site. See the section below.
 
@@ -46,20 +46,29 @@ docker run --name mysite.com -dti -p 80:80 taosnet/mysite
 Create the certificates:
 
 ```
-docker run --name mysite.com-ssl -ti -p 80:80 -v /certs m3adow/letsencrypt-simp_le \
-    -f account_key.json -f chain.pem -f cert.pem -f key.pem --email email@mysite.com -d mysite.com
+docker run --rm -ti -p 80:80 -v mysite.com-ssl:/etc/letsencrypt quay.io/letsencrypt/letsencrypt  \
+    certonly --standalone --preferred-challenge http -d mysite.com
+```
+
+Convert the certificate into a form recognizable by hiawatha:
+```
+docker run --name mysite.com-certs -v mysite.com-ssl:/etc/letsencrypt -v mysite.com-certs:/certs taosnet/cert-manager \
+    mysite.com letsencrypt hiawatha
 ```
 
 Run the site:
 
 ```
-docker run --name mysite.com -dti -p 443:443 -e HTTP_DOMAIN=mysite.com --volumes-from mysite.com-ssl taosnet/hiawatha
+docker run --name mysite.com -dti -p 443:443 -e HTTP_DOMAIN=mysite.com --volumes-from mysite.com-certs taosnet/hiawatha
 ```
 
 To renew the certificates:
 
 ```
-docker start mysite.com-ssl && docker restart mysite.com
+docker create --name mysite.com-ssl -v mysite.com-ssl:/etc/letsencrypt -p 80:80 -ti quay.io/letsencrypt/letsencrypt \
+    renew
+
+docker start mysite.com-ssl && docker start mysite.com-certs && docker restart mysite.com
 ```
 
 ### Redirecting http to https
@@ -69,17 +78,35 @@ Create the certificate as above.
 Run the site utilizing the HTTP_REQUIRE_TLS environmental variable to enable the redirect:
 
 ```
-docker run --name mysite.com -dti -p 443:443 -p 80:80 -e HTTP_DOMAIN=mysite.com -e HTTP_REQUIRE_TLS=yes --volumes-from mysite.com-ssl taosnet/hiawatha
+docker run --name mysite.com -dti -p 443:443 -p 80:80 -e HTTP_DOMAIN=mysite.com -e HTTP_REQUIRE_TLS=yes \
+    --volumes-from mysite.com-certs taosnet/hiawatha
 ```
 
 Because the site uses port 80, you need to bring the site down temporarily while you renew the certificates:
 
 ```
-docker stop mysite.com && docker start mysite.com-ssl
+docker stop mysite.com && docker start mysite.com-ssl && docker start mysite.com-certs
 docker start mysite.com
+```
+
+#### Proxying Lets Encrypt
+
+If you wish to minimize the downtime to your site when renewing certificates, you can utilize the **HTTP_CERT_PROXY_HOST** variable. Because you cannot have more than one server listing on the same IP/port pair, you will need to specify the IPs used in your port translations.
+
+The site creation becomes:
+```
+docker run --name mysite.com -d -p publicIP1:80:80 -p publicIP1:443:443 --volumes-from mysite.com-certs \
+    -e HTTP_DOMAIN=mysite.com -e HTTP_REQUIRE_TLS=yes -e HTTP_CERT_PROXY_HOST=certServer taosnet/hiawatha
+```
+It is best if **certServer** references either a public DNS name, or a static IP that can be referenced by the site. The renewal process then becomes:
+```
+docker run --name mysite.com-ssl -v mysite.com-ssl:/etc/letsencrypt -p certSeverIP:80:80 -t quay.io/letsencrypt/letsencrypt renew \
+&& docker start mysite.com-certs \
+&& docker restart mysite.com
 ```
 
 # Environmental Variables
 
   * **HTTP_DOMAIN** is the domain name for the site.
   * **HTTP_REQUIRE_TLS** specifies whether or not the site requires TLS. Can be **yes** or **no**. Defaults to **no**.
+  * **HTTP_CERT_PROXY_HOST** specifies the IP or DNS name for the server to proxy Lets Encrypt requests to.

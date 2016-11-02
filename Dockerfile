@@ -1,8 +1,7 @@
 FROM alpine:edge
 MAINTAINER Chris Batis <clbatis@taosnet.com>
 
-RUN apk update && \
-	apk add musl libxslt zlib libxml2 mbedtls && \
+RUN apk --update add musl libxslt zlib libxml2 mbedtls && \
 	apk add hiawatha --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted && \
 	rm -rf /var/cache/apk/* && \
 	addgroup -S www-data && \
@@ -10,9 +9,8 @@ RUN apk update && \
 	mkdir /certs
 
 COPY hiawatha /etc/hiawatha/
-COPY hiawatha.pem /certs
-COPY hiawatha.sh /hiawatha.sh
+COPY bin /usr/bin/
 
 EXPOSE 80 443
 
-ENTRYPOINT ["/hiawatha.sh"]
+ENTRYPOINT ["/usr/bin/hiawatha-wrapper"]

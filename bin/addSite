@@ -1,0 +1,44 @@
+#!/bin/sh
+
+usage()
+{
+	echo Usage: $0 [-c certificateProxyHost] [-p proxyHost] [-t] domain
+	exit 1
+}
+
+requireTLS=""
+certHost=""
+proxyHost=""
+
+while getopts c:tp: o
+do
+	case "$o" in
+		c) certHost="$OPTARG";;
+		p) proxyHost="$OPTARG";;
+		t) requireTLS="yes";;
+		[?]) usage;;
+	esac
+done
+shift $(($OPTIND-1))
+
+if [ -z "$1" ]; then usage; fi
+domain="$1"
+
+if [ -e /var/www/$domain ]; then
+	echo Domain structure exists. Aborting...
+	exit 2
+fi
+
+mkdir -p /var/www/$domain/public
+
+sed -e "s/DOMAIN/$domain/g" </etc/hiawatha/site.conf >/etc/hiawatha/sites.d/$domain.conf
+
+# RequireTLS
+if [ -n "$requireTLS" ]; then
+	sed -i -e "s/.*RequireTLS.*/    RequireTLS = yes/" /etc/hiawatha/sites.d/$domain.conf
+fi
+
+# Check for certificate verification for Lets Encrypt
+if [ -n "$certHost" ]; then
+	sed -i -e 's_^#\(.*ReverseProxy.*http://\)CERTHOST_\1'"$certHost"'_' /etc/hiawatha/sites.d/$domain.conf
+fi
