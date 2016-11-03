@@ -31,6 +31,7 @@ fi
 
 mkdir -p /var/www/$domain/public
 
+if ! [ -d /etc/hiawatha/sites.d ]; then mkdir /etc/hiawatha/sites.d; fi
 sed -e "s/DOMAIN/$domain/g" </etc/hiawatha/site.conf >/etc/hiawatha/sites.d/$domain.conf
 
 # RequireTLS
