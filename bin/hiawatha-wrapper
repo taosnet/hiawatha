@@ -16,17 +16,24 @@ else
 	certHost=""
 fi
 
+# Check to see if the site is a reverse proxy for another site.
+if [ -n "$HTTP_PROXY_HOST" ]; then
+	proxyHost="-p$HTTP_PROXY_HOST"
+else
+	proxyHost=""
+fi
+
 # Handle SSL support
 if [ -e /certs/$DOMAIN.pem ]; then
 	/usr/bin/setupSSL "$DOMAIN"
 	# Read TLS environmental variable
 	if [ -n "$HTTP_REQUIRE_TLS" ] && [ "$HTTP_REQUIRE_TLS" = "yes" ]; then
-		/usr/bin/addSite -t $certHost $DOMAIN
+		/usr/bin/addSite -t $certHost $proxyHost $DOMAIN
 	else
-		/usr/bin/addSite $certHost $DOMAIN
+		/usr/bin/addSite $certHost $proxyHost $DOMAIN
 	fi
 else
-	/usr/bin/addSite $certHost $DOMAIN
+	/usr/bin/addSite $certHost $proxyHost $DOMAIN
 fi
 
 fi

@@ -42,3 +42,8 @@ fi
 if [ -n "$certHost" ]; then
 	sed -i -e 's_^#\(.*ReverseProxy.*http://\)CERTHOST_\1'"$certHost"'_' /etc/hiawatha/sites.d/$domain.conf
 fi
+
+# Check for proxyHost configuration
+if [ -n "$proxyHost" ]; then
+	sed -i -e 's_^#\(.*ReverseProxy.*http://\)PROXYHOST_\1'"$proxyHost"'_' /etc/hiawatha/sites.d/$domain.conf
+fi
