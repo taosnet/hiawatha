@@ -1,0 +1,5 @@
+#!/bin/sh
+
+if ! [ -e /etc/hiawatha/active.d/ssl.conf ]; then
+	ln -s /etc/hiawatha/conf.d/ssl.conf /etc/hiawatha/active.d/ssl.conf
+fi

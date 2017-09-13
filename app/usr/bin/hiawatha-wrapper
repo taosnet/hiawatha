@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# Check for presence of Lets Encrypt Certificates and build a hiawatha certificate if applicable.
+if [ -e /etc/hiawatha/tls/privkey.pem ] && [ -e /etc/hiawatha/tls/cert.pem ]; then
+	cp /etc/hiawatha/tls/privkey.pem /etc/hiawatha/tls/hiawatha.pem
+	echo >>/etc/hiawatha/tls/hiawatha.pem
+	cat /etc/hiawatha/tls/cert.pem >>/etc/hiawatha/tls/hiawatha.pem
+	if [ -e /etc/hiawatha/tls/chain.pem ]; then
+		echo >>/etc/hiawatha/tls/hiawatha.pem
+		cat /etc/hiawatha/tls/chain.pem >>/etc/hiawatha/tls/hiawatha.pem
+	fi
+fi
+
+# If a hiawatha certificate is available, enable SSL mode.
+if [ -e /etc/hiawatha/tls/hiawatha.pem ]; then
+	/usr/bin/setupSSL
+	if ! [ -e /etc/hiawatha/active.d/ssl.conf ]; then
+		ln -s /etc/hiawatha/conf.d/ssl.conf /etc/hiawatha/active.d/ssl.conf
+	fi
+fi
+
+# Enable the use of the HTTP_DOMAIN environmental variable
+if [ -n "$HTTP_DOMAIN" ]; then
+	if [ -n "$HTTP_PROXY_HOST" ]; then
+		/usr/bin/addSite -p "$HTTP_PROXY_HOST" "$HTTP_DOMAIN"
+	else
+		/usr/bin/addSite "$HTTP_DOMAIN"
+	fi
+fi
+
+# Run hiawatha in the foreground.
+/usr/sbin/hiawatha -d -c /etc/hiawatha

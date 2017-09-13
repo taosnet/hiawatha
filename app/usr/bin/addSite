@@ -1,0 +1,70 @@
+#!/bin/sh
+
+usage()
+{
+	echo Usage: $0 [-p proxyHost] domain
+	exit 1
+}
+
+proxyHost=""
+
+while getopts p: o
+do
+	case "$o" in
+		p) proxyHost="$OPTARG";;
+		[?]) usage;;
+	esac
+done
+shift $(($OPTIND-1))
+
+if [ -z "$1" ]; then usage; fi
+domain="$1"
+
+# Creat the domain structure if needed.
+if ! [ -d /var/www/$domain/public ]; then
+	if [ -e /var/www/$domain ] && ! [ -d /var/www/$domain ]; then
+		echo Domain structure must start with a directory. Re-creating...
+		rm /var/www/$domain
+	fi
+	if [ -e /var/www/$domain/public ]; then
+		echo Domain web root must be a directory. Re-creating...
+		rm /var/www/$domain/public
+	fi
+	mkdir -p /var/www/$domain/public
+fi
+
+# Create the configuration file for the domain if needed.
+if ! [ -e /etc/hiawatha/sites.d/${domain}.conf ]; then
+	if [ -n "$proxyHost" ]; then
+		proxyHost="ReverseProxy ^/ http://$proxyHost/"
+	else
+		proxyHost="# No reverse proxy."
+	fi
+	# Detect if we should be using TLS.
+	if [ -e "/etc/hiawatha/tls/hiawatha.pem" ]; then
+		requireTLS="RequireTLS = yes"
+	else
+		requireTLS="# TLS Unused."
+	fi
+	# Detect if we should be using CGI.
+	if [ -n "$HTTP_CGI_TIMEOUT" ]; then
+		read -r -d '' cgi <<EOS
+TimeForCGI = $HTTP_CGI_TIMEOUT
+    ExecuteCGI = yes
+EOS
+	else
+		cgi="# CGI Unused."
+	fi
+	cat >/etc/hiawatha/sites.d/${domain}.conf <<CONFIG
+VirtualHost {
+    Hostname = www.$domain, $domain
+    WebsiteRoot = /var/www/$domain/public
+    AccessLogfile = /var/www/$domain/access.log
+    ErrorLogfile = /var/www/$domain/error.log
+    UseDirectory = static
+    $requireTLS
+    $proxyHost
+    $cgi
+}
+CONFIG
+fi
