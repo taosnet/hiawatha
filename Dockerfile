@@ -9,3 +9,4 @@ RUN apk --no-cache add musl libxslt zlib libxml2 mbedtls && \
 EXPOSE 80/tcp 443/tcp
 ENTRYPOINT /usr/bin/hiawatha-wrapper
 COPY app /
+VOLUME ["/var/www", "/etc/hiawatha/sites.d", "/etc/hiawatha/tls"]

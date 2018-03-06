@@ -2,16 +2,18 @@
 
 usage()
 {
-	echo Usage: $0 [-p proxyHost] domain
+	echo Usage: $0 [-a accessList] [-p proxyHost] domain
 	exit 1
 }
 
-proxyHost=""
+accessList="# No access control list."
+proxyHost="# No reverse proxy."
 
-while getopts p: o
+while getopts a:p: o
 do
 	case "$o" in
-		p) proxyHost="$OPTARG";;
+		a) accessList="AccessList = $OPTARG";;
+		p) proxyHost="ReverseProxy ^/ http://$OPTARG/";;
 		[?]) usage;;
 	esac
 done
@@ -35,11 +37,6 @@ fi
 
 # Create the configuration file for the domain if needed.
 if ! [ -e /etc/hiawatha/sites.d/${domain}.conf ]; then
-	if [ -n "$proxyHost" ]; then
-		proxyHost="ReverseProxy ^/ http://$proxyHost/"
-	else
-		proxyHost="# No reverse proxy."
-	fi
 	# Detect if we should be using TLS.
 	if [ -e "/etc/hiawatha/tls/hiawatha.pem" ]; then
 		requireTLS="RequireTLS = yes"
@@ -64,6 +61,7 @@ VirtualHost {
     UseDirectory = static
     $requireTLS
     $proxyHost
+    $accessList
     $cgi
 }
 CONFIG

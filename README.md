@@ -14,16 +14,35 @@ This container does **NOT** have php installed in any form. If you wish to use p
 
 There are two ways to build a site using this image:
 
-  1. Use a data volume for your web app.
-  1. Extend the image with your own image.
+  1. Use as an [application level firewall](#using-as-an-application-level-firewall) and for simple (non-cgi) sites.
+  1. Use a [data](#using-a-data-volume) volume for your web app.
+  1. [Extend](#extending-the-image) the image with your own image.
+
+## Using as an Application Level Firewall
+
+First run the application you wish to protect (in this example a node app running on port 8080), then start hiawatha as a [reverse proxy](#reverse-proxy) for the application:
+
+```
+docker run --name mynodeapp -v /path/to/app:/usr/src/app:Z node server.js
+docker run --name mysite.com --link mynodeapp:site \
+    -p 80:80 -p 443:443 -e HTTP_DOMAIN=mysite.com -e HTTP_PROXY_HOST=site:8080 \
+    taosnet/hiawatha
+```
 
 ## Using a data volume
 
 To use a data volume for you web app:
+
 ```
 docker run --name mysite.com -d p 80:80 -e HTTP_DOMAIN=mysite.com \
     -v /path/to/webapp:/var/www/mysite.com/public:Z taosnet/hiawatha
 ```
+
+By default, docker volumes are created for the following paths:
+
+  * /var/www
+  * /etc/hiawatha/sites.d
+  * /etc/hiawatha/tls
 
 ## Extending the Image
 
@@ -48,7 +67,7 @@ docker run --name mysite.com -d -p 80:80 taosnet/mysite
 
 ## SSL with Lets Encrypt
 
-If the files **privkey.pem**, **cert.pem**, and **privkey.pem** are in _/etc/hiawatha/tls_, then a hiawatha compatible certificate will be automatically built, and SSL will be enabled for the container.
+If the files **privkey.pem**, **cert.pem**, and **privkey.pem** are in _/etc/hiawatha/tls_, then a hiawatha compatible certificate will be automatically built, and SSL will be enabled for the container. Note that any sites on the image prior to the certificates being installed will not **RequireTLS**, but new sites added with **/usr/bin/addSite** will.
 
 ### Example using certbot
 
@@ -56,25 +75,50 @@ Assuming that the container is already running from the command:
 
 ```
 docker run --name mysite.com -d -p 80:80 -p 443:443 -e HTTP_DOMAIN=mysite.com \
-    -v /path/to/webapp:/var/www/mysite.com/public:Z -v certs:/etc/hiawatha/tls taosnet/hiawatha
+    -v webroot:/var/www -v sites:/etc/hiawatha/sites.d -v certs:/etc/hiawatha/tls \
+    taosnet/hiawatha
 ```
 
 The tasks to enable https on this container are:
 
-1. Obtain a certificate.
-1. Copy the certificate, private key, chain to the proper location.
-1. Restart the container to use the new certificate.
+  1. Obtain a certificate.
+  1. Copy the certificate, private key, chain to the proper location.
+  1. Restart the container to use the new certificate.
 
 ```
-docker run --rm -v letsencrypt:/etc/letsencrypt -v /path/to/webapp:/webroot \
-    certbot/certbot certonly --webroot -w /webroot -d mysite.com
-docker run --rm -v letsencrypt:/etc/letsencrypt -v certs:/certs \
+docker run --rm -v letsencrypt:/etc/letsencrypt --volumes-from mysite.com \
+    certbot/certbot certonly --cert-name mysite.com --webroot \
+    -w /var/www/mysite.com/public -d mysite.com
+docker run --rm -v letsencrypt:/etc/letsencrypt --volumes-from mysite.com \
     busybox cp -L \
         /etc/letsencrypt/live/mysite.com/privkey.pem \
         /etc/letsencrypt/live/mysite.com/cert.pem \
         /etc/letsencrypt/live/mysite.com/chain.pem \
-        /certs
+        /etc/hiawatha/tls/
 docker restart mysite.com
+```
+
+If serving multiple sites, then just change the initial creation of the site to use --webroot-map:
+
+```
+docker run --rm -v letsencrypt:/etc/letsencrypt --volumes-from mysites \
+    certbot/certbot certonly --cert-name mysite.com --webroot \
+    --webroot-map '{"mysite.com":"/var/www/mysite.com/public","mysite2.com":"/var/www/mysite2.com/public"}'
+```
+
+#### Automated Certificate Renewal
+
+Renewing the certificate is easy to automate with:
+
+```
+docker create --name mysite.com-ssl -v letsencrypt:/etc/letsencrypt --volumes-from mysite.com \
+    certbot/certbot renew --deploy-hook 'cp -L /etc/letsencrypt/live/mysite.com/privkey.pem /etc/letsencrypt/live/mysite.com/cert.pem /etc/letsencrypt/live/mysite.com/chain.pem /etc/hiawatha/tls/'
+```
+
+and to renew (in a cron job or some other automatted process):
+
+```
+docker run mysite.com-ssl && docker restart mysite.com
 ```
 
 It is important to note that sites that already existed before the creation of the certificate will not have RequireTLS set.
@@ -93,13 +137,15 @@ docker run --name mysite.com --link mynodeapp:site -e HTTP_DOMAIN=mysite.com -e 
 
   * **HTTP_DOMAIN** is the domain name for the site. If the container has a hiawatha certificate in _/etc/hiawatha/tls_, then the site will set RequireTLS.
   * **HTTP_PROXY_HOST** hostname or IP that the site with reverse proxy for. If the container has a hiawatha certificate in _/etc/hiawatha/tls_, then the site will set RequireTLS.
+  * **HTTP_ACCESS_LIST** is the list of IP addresses allowed to access this site. Leave empty (default) to allow access to all. Uses AccessList syntax ([hiawatha man page](https://www.hiawatha-webserver.org/manpages/hiawatha)). ex: `-e 'HTTP_ACCESS_LIST=allow 192.168.1.0/24,deny all'`
 
 # Utilities
 
-## /usr/bin/addSite [-p reverseProxyHost] domain
+## /usr/bin/addSite [-a accessList] [-p reverseProxyHost] domain
 
 Can be used to add additional sites to the server. After changes, the container will need to be restarted for the changes to go into effect. Note that if the site already exists, this does nothing.
 
+  * -a accessList: Specifies the AccessList for the site. See [hiawatha man page](https://www.hiawatha-webserver.org/manpages/hiawatha) for syntax. Defaults to allow all. Note that it is best to enclose the argument in single quotes. ex: `-a 'allow 192.168.1.0/24, deny all'`
   * -p reverseProxyHost: Specifies that this site is a reverse proxy for another site. See the section on **Reverse Proxy** for details.
   * domain: The domain name for the site. Automatically provides support for www.domain requests as well.
 
@@ -119,3 +165,10 @@ docker exec mysite.com /usr/bin/setupSSL && docker restart mysite.com
 ```
 
 A certificate file must exist prior to restarting the container. You should not need to call this utility directly, but it is listed for completeness.
+
+# Recent Changes
+
+### 2018-03-05
+
+  * 2018-03-05 Added support for HTTP_ACCESS_LIST environmental variable.
+  * 2018-03-05 Added VOLUMES /var/www, /etc/hiawatha/sites.d, and /etc/hiawatha/tls for easier integration with other tools via --volumes-from.

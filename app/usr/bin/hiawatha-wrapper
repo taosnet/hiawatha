@@ -21,10 +21,14 @@ fi
 
 # Enable the use of the HTTP_DOMAIN environmental variable
 if [ -n "$HTTP_DOMAIN" ]; then
+	accessList=""
+	if [ -n "$HTTP_ACCESS_LIST" ]; then
+		accessList="-a '$HTTP_ACCESS_LIST'"
+	fi
 	if [ -n "$HTTP_PROXY_HOST" ]; then
-		/usr/bin/addSite -p "$HTTP_PROXY_HOST" "$HTTP_DOMAIN"
+		/usr/bin/addSite -p "$HTTP_PROXY_HOST" "$accessList" "$HTTP_DOMAIN"
 	else
-		/usr/bin/addSite "$HTTP_DOMAIN"
+		/usr/bin/addSite "$accessList" "$HTTP_DOMAIN"
 	fi
 fi
 

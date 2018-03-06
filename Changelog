@@ -1,0 +1,6 @@
+# Changelog
+
+### 2018-03-05
+
+  * 2018-03-05 Added support for HTTP_ACCESS_LIST environmental variable.
+  * 2018-03-05 Added VOLUMES /var/www, /etc/hiawatha/sites.d, and /etc/hiawatha/tls for easier integration with other tools via --volumes-from.
