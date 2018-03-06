@@ -118,7 +118,7 @@ docker create --name mysite.com-ssl -v letsencrypt:/etc/letsencrypt --volumes-fr
 and to renew (in a cron job or some other automatted process):
 
 ```
-docker run mysite.com-ssl && docker restart mysite.com
+docker start mysite.com-ssl && docker restart mysite.com
 ```
 
 It is important to note that sites that already existed before the creation of the certificate will not have RequireTLS set.
